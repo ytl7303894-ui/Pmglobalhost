@@ -298,7 +298,7 @@ def _sec_scan_archive(file_path: str) -> dict:
 
                 for member in t.getmembers():
 
-                    if member.name.startswith(\'/\') or \'..\' in member.name.split(\'/\'):
+                    if member.name.startswith('/') or '..' in member.name.split('/'):
 
                         return {"verdict": "DANGEROUS", "risk_score": 99,
 
