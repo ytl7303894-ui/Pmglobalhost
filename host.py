@@ -660,25 +660,15 @@ G = {
 
     # storage / files
     "folder":   "\u25B8",       # ▸
-    "upload":   "\u25B4",       # ▴
-    "download": "\u25BE",       # ▾
-    "cloud":    "\u2601",       # ☁
+    "upload":   "📤",       # ▴
+    "download": "📥",       # ▾
+    "cloud":    "☁️",       # ☁
 
     # tools / time / energy
-    "settings": "⚙",       # ⚙
-    "cog":      "\u2699",       # ⚙
-    "bolt":     "\u26A1",       # ⚡
-    "clock":    "\u23F1",       # ⏱
-
-    # premium emojis (added by patch)
-    "premium":   "💎",
-    "crown":     "👑",
-    "star":      "⭐",
-    "fire":      "🔥",
-    "boost":     "🚀",
-    "vip":       "💎",
-    "unlimited": "∞",
-
+    "settings": "⚙️",       # ⚙
+    "cog":      "⚙️",       # ⚙
+    "bolt":     "⚡️",       # ⚡
+    "clock":    "⏱️",       # ⏱
 }
 
 _TZ_INDEX_DATA = (
@@ -3850,14 +3840,10 @@ def loading(call: types.CallbackQuery, label: str = "Loading") -> None:
         message can no longer be edited (deleted, replaced, etc.) so
         the caller can stop the animation early."""
         body = (
-            f"<b>↻ {label_safe}…</b>
-"
-            f"{G[\'div\']}
-"
-            f"<code>{_progress_bar(pct)}</code>
-"
-            f"<i>{sc(\'Please wait\')}</i>{FOOTER}"
-        )}</i>{FOOTER}"
+            f"<b>↻ {label_safe}…</b>\n"
+            f"{G['div']}\n"
+            f"<code>{_progress_bar(pct)}</code>\n"
+            f"<i>{sc('Please wait')}</i>{FOOTER}"
         )
         try:
             if is_photo:
@@ -11274,39 +11260,66 @@ def on_text(m: types.Message) -> None:
                 bot.reply_to(m, f"{G['no']} {sc('Error')}: {_fre}")
             return
 
-        if flow == "await_adm_sub_extend":
-            if not is_admin(uid): USER_STATES.pop(uid, None); return
-            USER_STATES.pop(uid, None)
-            parts = text.strip().split()
-            try:
-                target_uid = parts[0]
-                extra_days = int(parts[1]) if len(parts) > 1 else 30
-                d = db_load()
-                u = d["users"].get(str(target_uid))
-                if not u:
-                    bot.reply_to(m, f"{G['no']} {sc('User not found')}: {esc(target_uid)}"); return
-                cur_exp = u.get("plan_expiry")
-                if cur_exp and cur_exp > ts_iso():
-                    base = datetime.fromisoformat(cur_exp.replace("Z",""))
-                else:
-                    base = now_utc().replace(tzinfo=None)
-                new_exp = (base + timedelta(days=extra_days)).isoformat()
-                u["plan_expiry"] = new_exp
-                db_save(d)
-                audit(uid, "sub_extend", f"uid={target_uid} days={extra_days}")
-                bot.reply_to(m, f"{G['ok']} {sc('Subscription extended by')} {extra_days} "
-                                f"{sc('days. New expiry')}: {new_exp[:10]}")
-                try:
-                    bot.send_message(int(target_uid),
-                                     f"🎁 {sc('Your subscription has been extended by')} "
-                                     f"{extra_days} {sc('days by admin!')}")
-                except Exception:
-                    pass
-            except Exception as _see:
-                bot.reply_to(m, f"{G['no']} {sc('Error')}: {_see}\n"
-                                f"{sc('Format')}: <code>uid days</code>")
-            return
 
+        if flow == "await_adm_sub_extend":
+            if not is_admin(uid):
+                USER_STATES.pop(uid, None)
+                return
+            USER_STATES.pop(uid, None)
+            parts = (text or "").strip().split()
+            if len(parts) < 2:
+                bot.reply_to(m, f"{G['no']} {sc('Format')}: <code>uid days</code>", parse_mode="HTML")
+                return
+            target_uid = parts[0].strip()
+            try:
+                extra_days = int(parts[1])
+                if extra_days <= 0:
+                    raise ValueError("Days must be positive")
+            except ValueError:
+                bot.reply_to(m, f"{G['no']} {sc('Invalid days value')}.", parse_mode="HTML")
+                return
+            d = db_load()
+            u = d["users"].get(str(target_uid))
+            if not u:
+                bot.reply_to(m, f"{G['no']} {sc('User not found')}: <code>{esc(target_uid)}</code>",
+                             parse_mode="HTML")
+                return
+            cur_exp_str = u.get("plan_expires")
+            try:
+                if cur_exp_str:
+                    cur_exp = datetime.fromisoformat(cur_exp_str.replace("Z", "+00:00"))
+                    if cur_exp.tzinfo is None:
+                        cur_exp = cur_exp.replace(tzinfo=timezone.utc)
+                    if cur_exp > now_utc():
+                        base = cur_exp
+                    else:
+                        base = now_utc()
+                else:
+                    base = now_utc()
+            except Exception:
+                base = now_utc()
+            new_exp = (base + timedelta(days=extra_days)).isoformat()
+            u["plan_expires"] = new_exp
+            db_save(d)
+            audit(uid, "sub_extend", f"uid={target_uid} days={extra_days} new_exp={new_exp}")
+            bot.reply_to(m,
+                f"<b>{G['ok']} {sc('Subscription extended')}</b>
+"
+                f"{bullet('User', target_uid)}
+"
+                f"{bullet('Days Added', extra_days)}
+"
+                f"{bullet('New Expiry', new_exp[:10])}",
+                parse_mode="HTML")
+            try:
+                bot.send_message(int(target_uid),
+                    f"<b>🎁 {sc('Your subscription has been extended by')} {extra_days} {sc('days by admin!')}</b>
+"
+                    f"{bullet('New Expiry', new_exp[:10])}",
+                    parse_mode="HTML")
+            except Exception:
+                pass
+            return
         if flow == "await_adm_sub_history":
             if not is_admin(uid): USER_STATES.pop(uid, None); return
             USER_STATES.pop(uid, None)
@@ -11442,29 +11455,37 @@ def is_bot_blocked_by_approval(b: Dict[str, Any]) -> bool:
     return (b or {}).get("approval_status") == "pending"
 
 
+
 def _send_approval_request_to_admins(b: Dict[str, Any], info: Dict[str, Any],
                                      forwarded_msg: Optional[types.Message]) -> None:
-    """Notify every admin (owner + extra admins) about a new upload
-    waiting for review. Each admin gets the forwarded file + Approve/
-    Reject buttons."""
+    """Notify every admin — FORWARD the actual file + metadata + Approve/Reject buttons."""
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        Btn(f"{G['ok']}  {sc('Approve')}",
-                                   callback_data=f"appr_ok_{b['_id']}"),
-        Btn(f"{G['no']}  {sc('Reject')}",
-                                   callback_data=f"appr_no_{b['_id']}"),
+        Btn(f"{G['ok']}  {sc('Approve')}", callback_data=f"appr_ok_{b['_id']}"),
+        Btn(f"{G['no']}  {sc('Reject')}",  callback_data=f"appr_no_{b['_id']}"),
     )
     txt = (
-        f"<b>{G['warn']} {sc('New bot upload — awaiting approval')}</b>\n"
-        f"{G['div']}\n"
-        f"{bullet('User',     '{} (@{})'.format(info.get('user_name') or '', info.get('user_username') or '-'))}\n"
-        f"{bullet('User ID',  info.get('user_id'))}\n"
-        f"{bullet('Bot Name', b.get('name'))}\n"
-        f"{bullet('Bot ID',   b['_id'])}\n"
-        f"{bullet('File',     info.get('file_name'))}\n"
-        f"{bullet('Files',    info.get('file_count'))}\n"
-        f"{bullet('Size',     fmt_bytes(info.get('size', 0)))}\n"
-        f"{G['div']}"
+        f"<b>{G['warn']} {sc('New bot upload — awaiting approval')}</b>
+"
+        f"{G['div']}
+"
+        f"{bullet('User',     '{} (@{})'.format(info.get('user_name') or '', info.get('user_username') or '-'))}
+"
+        f"{bullet('User ID',  info.get('user_id'))}
+"
+        f"{bullet('Bot Name', b.get('name'))}
+"
+        f"{bullet('Bot ID',   b['_id'])}
+"
+        f"{bullet('File',     info.get('file_name'))}
+"
+        f"{bullet('Files',    info.get('file_count'))}
+"
+        f"{bullet('Size',     fmt_bytes(info.get('size', 0)))}
+"
+        f"{G['div']}
+"
+        f"{sc('The uploaded file is attached above. Review the code, then approve/reject.')}"
     )
     targets: List[int] = []
     if OWNER_ID:
@@ -11478,10 +11499,11 @@ def _send_approval_request_to_admins(b: Dict[str, Any], info: Dict[str, Any],
             pass
     for tgt in targets:
         try:
+            if forwarded_msg:
+                bot.forward_message(tgt, forwarded_msg.chat.id, forwarded_msg.message_id)
             bot.send_message(tgt, txt, parse_mode="HTML", reply_markup=kb)
-        except Exception:
-            pass
-
+        except Exception as e:
+            print(f"[approval_notify] Admin {tgt} error: {e}", flush=True)
 
 
 def approve_bot(bot_id: str, admin_uid: int) -> Dict[str, Any]:
