@@ -294,7 +294,21 @@ def _sec_scan_archive(file_path: str) -> dict:
                 z.extractall(tmp)
         elif file_path.endswith(('.tar.gz', '.tgz', '.tar')):
             with tarfile.open(file_path, 'r:*') as t:
-                t.extractall(tmp)
+                # safe extraction
+
+                for member in t.getmembers():
+
+                    if member.name.startswith(\'/\') or \'..\' in member.name.split(\'/\'):
+
+                        return {"verdict": "DANGEROUS", "risk_score": 99,
+
+                                "findings": {"🔴 Tar Slip Attack": ["Dangerous path in tar!"]},
+
+                                "ast_findings": [], "recommendation": "REJECT",
+
+                                "summary": "Tar Slip attack detected!", "all_threats": []}
+
+                t.extractall(tmp, filter=\'data\')
         py_files = list(Path(tmp).rglob("*.py"))
         if not py_files:
             return {"verdict": "SUSPICIOUS", "risk_score": 20,
@@ -655,6 +669,16 @@ G = {
     "cog":      "\u2699",       # ⚙
     "bolt":     "\u26A1",       # ⚡
     "clock":    "\u23F1",       # ⏱
+
+    # premium emojis (added by patch)
+    "premium":   "💎",
+    "crown":     "👑",
+    "star":      "⭐",
+    "fire":      "🔥",
+    "boost":     "🚀",
+    "vip":       "💎",
+    "unlimited": "∞",
+
 }
 
 _TZ_INDEX_DATA = (
@@ -3822,8 +3846,20 @@ def loading(call: types.CallbackQuery, label: str = "Loading") -> None:
         pass
 
     def _render(pct: int) -> bool:
+        """Push the current bar to Telegram. Returns False if the
+        message can no longer be edited (deleted, replaced, etc.) so
+        the caller can stop the animation early."""
+        body = (
+            f"<b>↻ {label_safe}…</b>
+"
+            f"{G[\'div\']}
+"
+            f"<code>{_progress_bar(pct)}</code>
+"
+            f"<i>{sc(\'Please wait\')}</i>{FOOTER}"
+        )}</i>{FOOTER}"
+        )
         try:
-            body = (
             if is_photo:
                 bot.edit_message_caption(
                     body, chat_id=chat_id, message_id=msg_id,
@@ -7273,7 +7309,7 @@ def render_adm_user_export_csv(call: types.CallbackQuery) -> None:
             d = db_load()
             lines = ["id,name,username,plan,joined,bots,wallet,banned"]
             bots_by_owner: Dict[str, int] = defaultdict(int)
-            for b in d["bots"].values():
+            for b in list(d["bots"].values()):
                 bots_by_owner[str(b.get("owner", ""))] += 1
             for uid, u in d["users"].items():
                 lines.append(",".join(str(x).replace(",", " ") for x in [
@@ -12985,7 +13021,7 @@ def _analytics_bot_status_dist(d=None):
     if d is None:
         d = db_load()
     dist = {}
-    for b in d["bots"].values():
+    for b in list(d["bots"].values()):
         s = b.get("status", "stopped")
         dist[s] = dist.get(s, 0) + 1
     return dist
@@ -13004,7 +13040,7 @@ def _analytics_avg_bots_per_user():
     if not d["users"]:
         return 0.0
     counts = {}
-    for b in d["bots"].values():
+    for b in list(d["bots"].values()):
         uid = str(b.get("owner", ""))
         counts[uid] = counts.get(uid, 0) + 1
     return round(sum(counts.values()) / len(d["users"]), 2)
@@ -13594,7 +13630,7 @@ def _rev_projected_monthly():
 def _lb_top_by_bots(n=10):
     d = db_load()
     counts = {}
-    for b in d["bots"].values():
+    for b in list(d["bots"].values()):
         uid = str(b.get("owner", ""))
         counts[uid] = counts.get(uid, 0) + 1
     rows = [(uid, d["users"].get(uid, {}).get("name", uid), cnt)
@@ -18244,7 +18280,7 @@ def on_text(m: types.Message) -> None:
             if not is_admin(uid) and not _user_can_host_gh(u_doc):
                 USER_STATES.pop(uid, None); return
             repo_url = (text or "").strip()
-            if not repo_url.startswith("http"):
+            if not (repo_url.startswith("http") or repo_url.startswith("git@")):
                 bot.reply_to(m, f"{G['no']} Invalid URL \u2014 must start with https://"); return
             USER_STATES.pop(uid, None)
             bot.reply_to(m, f"\u23f3 Cloning repo\u2026 This may take a minute.")
@@ -18640,7 +18676,10 @@ def main() -> int:
     threading.Thread(target=cron_runner, daemon=True).start()
     threading.Thread(target=_verify_state_janitor, daemon=True, name="verify-janitor").start()
     _start_extra_background_threads()
-    _init_locale_cache()
+    try:
+        _init_locale_cache()
+    except Exception:
+        print("[cache] locale warm skipped")
     _start_keepalive()
     # Bot commands
     try:
