@@ -353,6 +353,7 @@ try:
 except Exception as _ssf_err:
     import sys as _sys
     print(f"[security] security_scanner_free.py not found — using built-in scanner ({_ssf_err})", file=_sys.stderr)
+    _SCANNER_OK = False
     # Fall back to built-in _scan_file defined above
 
 
@@ -433,7 +434,7 @@ def _ai_scan_code(code: str, filename: str = "file.py") -> Optional[Dict[str, An
 
 def _combined_scan(file_path: str) -> dict:
     """Run pattern scanner + AI scanner and merge results."""
-    pattern_result = _scan_file(file_path)
+    pattern_result = _scan_file(file_path) if _scan_file is not None else {"verdict": "SAFE", "risk_score": 0}
     filename = os.path.basename(file_path)
 
     # Only send .py / .js / .ts to AI (skip binary / unknown)
@@ -3772,7 +3773,7 @@ _LOADING_STOPS: Dict[Tuple[int, int], "threading.Event"] = {}
 _LOADING_LOCK = threading.Lock()
 
 
-def _progress_bar(pct: int, width: int = 20) -> str:
+def _progress_bar(pct: int, width: int = 20, *args, **kwargs) -> str:
     """`▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░ 70%` style bar."""
     pct = max(0, min(100, int(pct)))
     filled = int(round(width * pct / 100))
@@ -3821,16 +3822,8 @@ def loading(call: types.CallbackQuery, label: str = "Loading") -> None:
         pass
 
     def _render(pct: int) -> bool:
-        """Push the current bar to Telegram. Returns False if the
-        message can no longer be edited (deleted, replaced, etc.) so
-        the caller can stop the animation early."""
-        body = (
-            f"<b>↻ {label_safe}…</b>\n"
-            f"{G['div']}\n"
-            f"<code>{_progress_bar(pct)}</code>\n"
-            f"<i>{sc('Please wait')}</i>{FOOTER}"
-        )
         try:
+            body = (
             if is_photo:
                 bot.edit_message_caption(
                     body, chat_id=chat_id, message_id=msg_id,
