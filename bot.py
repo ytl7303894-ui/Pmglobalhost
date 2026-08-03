@@ -537,7 +537,7 @@ KEYRING_FILE  = DIRS["data"] / "keyring.json"   # tiny local cache only
 # ┌──────────────────────────────────────────────────────────────┐
 # │  BOT TOKEN  add karo.   ││
 # └──────────────────────────────────────────────────────────────┘
-BOT_TOKEN_HARDCODED = "8504895545:AAHZi2eTYPtmvWY0hWF8KmiSnbrsEpFmWXA"   # ← ADD BOT TOKEN
+BOT_TOKEN_HARDCODED = "8713065612:AAGzA8SivVl4Y8au8SFq02VGWDov_3lYqOg"   # ← ADD BOT TOKEN
 TOKEN = (
     os.environ.get("BOT_TOKEN")
     or os.environ.get("MAIN_BOT_TOKEN")
@@ -676,11 +676,11 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
 }
 
 PAYMENT_METHODS: Dict[str, Dict[str, Any]] = {
-    "bkash":   {"name": "bKash",       "number": "01306633616",         "type": "Send Money",       "tag": "[B]"},
-    "nagad":   {"name": "Nagad",       "number": "01306633616",         "type": "Send Money",       "tag": "[N]"},
-    "rocket":  {"name": "Rocket",      "number": "01306633616",         "type": "Send Money",       "tag": "[R]"},
-    "upay":    {"name": "Upay",        "number": "01306633616",         "type": "Send Money",       "tag": "[U]"},
-    "binance": {"name": "Binance Pay", "number": "Binance ID 758637628","type": "USDT (BEP20/TRC20)","tag": "[BP]"},
+    "CRAPITO":   {"name": "crapito",       "number": "contact admin",         "type": "sand money upi",       "tag": "[B]"},
+    "GPAY":   {"name": "g pay",       "number": "anurag99999@fam",         "type": "sand money upi",       "tag": "[N]"},
+    "UPI":  {"name": "UPI",      "number": "anurag99999@fam",         "type": "sand money upi",       "tag": "[R]"},
+    "FAMPAY":    {"name": "FAMPAY",        "number": "anurag99999@fam",         "type": "sand money upi",       "tag": "[U]"},
+    "upiapp": {"name": "any upi appy", "number": "UPI ID anurag99999@fam","type": "UPI ONLY ","tag": "[BP]"},
     "bank":    {"name": "Bank",        "number": "Contact admin",       "type": "Bank Transfer",    "tag": "[BK]"},
 }
 
