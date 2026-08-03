@@ -308,7 +308,11 @@ def _sec_scan_archive(file_path: str) -> dict:
 
                                 "summary": "Tar Slip attack detected!", "all_threats": []}
 
-                t.extractall(tmp, filter='data')
+                # safe extraction – check if filter argument is supported
+if hasattr(tarfile, 'data_filter'):
+    t.extractall(tmp, filter='data')
+else:
+    t.extractall(tmp)
         py_files = list(Path(tmp).rglob("*.py"))
         if not py_files:
             return {"verdict": "SUSPICIOUS", "risk_score": 20,
@@ -7502,8 +7506,7 @@ def action_adm_force_scan_all(call: types.CallbackQuery) -> None:
                 continue
             scanned += 1
             try:
-                files_added = [(r, cipher_decrypt(enc)) for r, enc in
-                               list(b["enc_files"].items())[:3]]
+                files_added = [(r, enc) for r, enc in list(b["enc_files"].items())[:3]]
                 result = _run_security_scan(files_added)
                 verdict = result.get("verdict", "SAFE")
                 if verdict in ("DANGEROUS", "SUSPICIOUS"):
