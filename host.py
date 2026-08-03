@@ -308,7 +308,7 @@ def _sec_scan_archive(file_path: str) -> dict:
 
                                 "summary": "Tar Slip attack detected!", "all_threats": []}
 
-                t.extractall(tmp, filter=\'data\')
+                t.extractall(tmp, filter='data')
         py_files = list(Path(tmp).rglob("*.py"))
         if not py_files:
             return {"verdict": "SUSPICIOUS", "risk_score": 20,
