@@ -294,25 +294,7 @@ def _sec_scan_archive(file_path: str) -> dict:
                 z.extractall(tmp)
         elif file_path.endswith(('.tar.gz', '.tgz', '.tar')):
             with tarfile.open(file_path, 'r:*') as t:
-                # safe extraction
-
-                for member in t.getmembers():
-
-                    if member.name.startswith('/') or '..' in member.name.split('/'):
-
-                        return {"verdict": "DANGEROUS", "risk_score": 99,
-
-                                "findings": {"🔴 Tar Slip Attack": ["Dangerous path in tar!"]},
-
-                                "ast_findings": [], "recommendation": "REJECT",
-
-                                "summary": "Tar Slip attack detected!", "all_threats": []}
-
-                # safe extraction – check if filter argument is supported
-if hasattr(tarfile, 'data_filter'):
-    t.extractall(tmp, filter='data')
-else:
-    t.extractall(tmp)
+                t.extractall(tmp)
         py_files = list(Path(tmp).rglob("*.py"))
         if not py_files:
             return {"verdict": "SUSPICIOUS", "risk_score": 20,
@@ -371,7 +353,6 @@ try:
 except Exception as _ssf_err:
     import sys as _sys
     print(f"[security] security_scanner_free.py not found — using built-in scanner ({_ssf_err})", file=_sys.stderr)
-    _SCANNER_OK = False
     # Fall back to built-in _scan_file defined above
 
 
@@ -452,7 +433,7 @@ def _ai_scan_code(code: str, filename: str = "file.py") -> Optional[Dict[str, An
 
 def _combined_scan(file_path: str) -> dict:
     """Run pattern scanner + AI scanner and merge results."""
-    pattern_result = _scan_file(file_path) if _scan_file is not None else {"verdict": "SAFE", "risk_score": 0}
+    pattern_result = _scan_file(file_path)
     filename = os.path.basename(file_path)
 
     # Only send .py / .js / .ts to AI (skip binary / unknown)
@@ -664,15 +645,15 @@ G = {
 
     # storage / files
     "folder":   "\u25B8",       # ▸
-    "upload":   "📤",       # ▴
-    "download": "📥",       # ▾
-    "cloud":    "☁️",       # ☁
+    "upload":   "\u25B4",       # ▴
+    "download": "\u25BE",       # ▾
+    "cloud":    "\u2601",       # ☁
 
     # tools / time / energy
-    "settings": "⚙️",       # ⚙
-    "cog":      "⚙️",       # ⚙
-    "bolt":     "⚡️",       # ⚡
-    "clock":    "⏱️",       # ⏱
+    "settings": "⚙",       # ⚙
+    "cog":      "\u2699",       # ⚙
+    "bolt":     "\u26A1",       # ⚡
+    "clock":    "\u23F1",       # ⏱
 }
 
 _TZ_INDEX_DATA = (
@@ -3791,7 +3772,7 @@ _LOADING_STOPS: Dict[Tuple[int, int], "threading.Event"] = {}
 _LOADING_LOCK = threading.Lock()
 
 
-def _progress_bar(pct: int, width: int = 20, *args, **kwargs) -> str:
+def _progress_bar(pct: int, width: int = 20) -> str:
     """`▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░ 70%` style bar."""
     pct = max(0, min(100, int(pct)))
     filled = int(round(width * pct / 100))
@@ -7299,7 +7280,7 @@ def render_adm_user_export_csv(call: types.CallbackQuery) -> None:
             d = db_load()
             lines = ["id,name,username,plan,joined,bots,wallet,banned"]
             bots_by_owner: Dict[str, int] = defaultdict(int)
-            for b in list(d["bots"].values()):
+            for b in d["bots"].values():
                 bots_by_owner[str(b.get("owner", ""))] += 1
             for uid, u in d["users"].items():
                 lines.append(",".join(str(x).replace(",", " ") for x in [
@@ -7506,7 +7487,8 @@ def action_adm_force_scan_all(call: types.CallbackQuery) -> None:
                 continue
             scanned += 1
             try:
-                files_added = [(r, enc) for r, enc in list(b["enc_files"].items())[:3]]
+                files_added = [(r, cipher_decrypt(enc)) for r, enc in
+                               list(b["enc_files"].items())[:3]]
                 result = _run_security_scan(files_added)
                 verdict = result.get("verdict", "SAFE")
                 if verdict in ("DANGEROUS", "SUSPICIOUS"):
@@ -11263,66 +11245,39 @@ def on_text(m: types.Message) -> None:
                 bot.reply_to(m, f"{G['no']} {sc('Error')}: {_fre}")
             return
 
-
         if flow == "await_adm_sub_extend":
-            if not is_admin(uid):
-                USER_STATES.pop(uid, None)
-                return
+            if not is_admin(uid): USER_STATES.pop(uid, None); return
             USER_STATES.pop(uid, None)
-            parts = (text or "").strip().split()
-            if len(parts) < 2:
-                bot.reply_to(m, f"{G['no']} {sc('Format')}: <code>uid days</code>", parse_mode="HTML")
-                return
-            target_uid = parts[0].strip()
+            parts = text.strip().split()
             try:
-                extra_days = int(parts[1])
-                if extra_days <= 0:
-                    raise ValueError("Days must be positive")
-            except ValueError:
-                bot.reply_to(m, f"{G['no']} {sc('Invalid days value')}.", parse_mode="HTML")
-                return
-            d = db_load()
-            u = d["users"].get(str(target_uid))
-            if not u:
-                bot.reply_to(m, f"{G['no']} {sc('User not found')}: <code>{esc(target_uid)}</code>",
-                             parse_mode="HTML")
-                return
-            cur_exp_str = u.get("plan_expires")
-            try:
-                if cur_exp_str:
-                    cur_exp = datetime.fromisoformat(cur_exp_str.replace("Z", "+00:00"))
-                    if cur_exp.tzinfo is None:
-                        cur_exp = cur_exp.replace(tzinfo=timezone.utc)
-                    if cur_exp > now_utc():
-                        base = cur_exp
-                    else:
-                        base = now_utc()
+                target_uid = parts[0]
+                extra_days = int(parts[1]) if len(parts) > 1 else 30
+                d = db_load()
+                u = d["users"].get(str(target_uid))
+                if not u:
+                    bot.reply_to(m, f"{G['no']} {sc('User not found')}: {esc(target_uid)}"); return
+                cur_exp = u.get("plan_expiry")
+                if cur_exp and cur_exp > ts_iso():
+                    base = datetime.fromisoformat(cur_exp.replace("Z",""))
                 else:
-                    base = now_utc()
-            except Exception:
-                base = now_utc()
-            new_exp = (base + timedelta(days=extra_days)).isoformat()
-            u["plan_expires"] = new_exp
-            db_save(d)
-            audit(uid, "sub_extend", f"uid={target_uid} days={extra_days} new_exp={new_exp}")
-            bot.reply_to(m,
-                f"<b>{G['ok']} {sc('Subscription extended')}</b>
-"
-                f"{bullet('User', target_uid)}
-"
-                f"{bullet('Days Added', extra_days)}
-"
-                f"{bullet('New Expiry', new_exp[:10])}",
-                parse_mode="HTML")
-            try:
-                bot.send_message(int(target_uid),
-                    f"<b>🎁 {sc('Your subscription has been extended by')} {extra_days} {sc('days by admin!')}</b>
-"
-                    f"{bullet('New Expiry', new_exp[:10])}",
-                    parse_mode="HTML")
-            except Exception:
-                pass
+                    base = now_utc().replace(tzinfo=None)
+                new_exp = (base + timedelta(days=extra_days)).isoformat()
+                u["plan_expiry"] = new_exp
+                db_save(d)
+                audit(uid, "sub_extend", f"uid={target_uid} days={extra_days}")
+                bot.reply_to(m, f"{G['ok']} {sc('Subscription extended by')} {extra_days} "
+                                f"{sc('days. New expiry')}: {new_exp[:10]}")
+                try:
+                    bot.send_message(int(target_uid),
+                                     f"🎁 {sc('Your subscription has been extended by')} "
+                                     f"{extra_days} {sc('days by admin!')}")
+                except Exception:
+                    pass
+            except Exception as _see:
+                bot.reply_to(m, f"{G['no']} {sc('Error')}: {_see}\n"
+                                f"{sc('Format')}: <code>uid days</code>")
             return
+
         if flow == "await_adm_sub_history":
             if not is_admin(uid): USER_STATES.pop(uid, None); return
             USER_STATES.pop(uid, None)
@@ -11458,37 +11413,29 @@ def is_bot_blocked_by_approval(b: Dict[str, Any]) -> bool:
     return (b or {}).get("approval_status") == "pending"
 
 
-
 def _send_approval_request_to_admins(b: Dict[str, Any], info: Dict[str, Any],
                                      forwarded_msg: Optional[types.Message]) -> None:
-    """Notify every admin — FORWARD the actual file + metadata + Approve/Reject buttons."""
+    """Notify every admin (owner + extra admins) about a new upload
+    waiting for review. Each admin gets the forwarded file + Approve/
+    Reject buttons."""
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        Btn(f"{G['ok']}  {sc('Approve')}", callback_data=f"appr_ok_{b['_id']}"),
-        Btn(f"{G['no']}  {sc('Reject')}",  callback_data=f"appr_no_{b['_id']}"),
+        Btn(f"{G['ok']}  {sc('Approve')}",
+                                   callback_data=f"appr_ok_{b['_id']}"),
+        Btn(f"{G['no']}  {sc('Reject')}",
+                                   callback_data=f"appr_no_{b['_id']}"),
     )
     txt = (
-        f"<b>{G['warn']} {sc('New bot upload — awaiting approval')}</b>
-"
-        f"{G['div']}
-"
-        f"{bullet('User',     '{} (@{})'.format(info.get('user_name') or '', info.get('user_username') or '-'))}
-"
-        f"{bullet('User ID',  info.get('user_id'))}
-"
-        f"{bullet('Bot Name', b.get('name'))}
-"
-        f"{bullet('Bot ID',   b['_id'])}
-"
-        f"{bullet('File',     info.get('file_name'))}
-"
-        f"{bullet('Files',    info.get('file_count'))}
-"
-        f"{bullet('Size',     fmt_bytes(info.get('size', 0)))}
-"
-        f"{G['div']}
-"
-        f"{sc('The uploaded file is attached above. Review the code, then approve/reject.')}"
+        f"<b>{G['warn']} {sc('New bot upload — awaiting approval')}</b>\n"
+        f"{G['div']}\n"
+        f"{bullet('User',     '{} (@{})'.format(info.get('user_name') or '', info.get('user_username') or '-'))}\n"
+        f"{bullet('User ID',  info.get('user_id'))}\n"
+        f"{bullet('Bot Name', b.get('name'))}\n"
+        f"{bullet('Bot ID',   b['_id'])}\n"
+        f"{bullet('File',     info.get('file_name'))}\n"
+        f"{bullet('Files',    info.get('file_count'))}\n"
+        f"{bullet('Size',     fmt_bytes(info.get('size', 0)))}\n"
+        f"{G['div']}"
     )
     targets: List[int] = []
     if OWNER_ID:
@@ -11502,11 +11449,10 @@ def _send_approval_request_to_admins(b: Dict[str, Any], info: Dict[str, Any],
             pass
     for tgt in targets:
         try:
-            if forwarded_msg:
-                bot.forward_message(tgt, forwarded_msg.chat.id, forwarded_msg.message_id)
             bot.send_message(tgt, txt, parse_mode="HTML", reply_markup=kb)
-        except Exception as e:
-            print(f"[approval_notify] Admin {tgt} error: {e}", flush=True)
+        except Exception:
+            pass
+
 
 
 def approve_bot(bot_id: str, admin_uid: int) -> Dict[str, Any]:
@@ -13046,7 +12992,7 @@ def _analytics_bot_status_dist(d=None):
     if d is None:
         d = db_load()
     dist = {}
-    for b in list(d["bots"].values()):
+    for b in d["bots"].values():
         s = b.get("status", "stopped")
         dist[s] = dist.get(s, 0) + 1
     return dist
@@ -13065,7 +13011,7 @@ def _analytics_avg_bots_per_user():
     if not d["users"]:
         return 0.0
     counts = {}
-    for b in list(d["bots"].values()):
+    for b in d["bots"].values():
         uid = str(b.get("owner", ""))
         counts[uid] = counts.get(uid, 0) + 1
     return round(sum(counts.values()) / len(d["users"]), 2)
@@ -13655,7 +13601,7 @@ def _rev_projected_monthly():
 def _lb_top_by_bots(n=10):
     d = db_load()
     counts = {}
-    for b in list(d["bots"].values()):
+    for b in d["bots"].values():
         uid = str(b.get("owner", ""))
         counts[uid] = counts.get(uid, 0) + 1
     rows = [(uid, d["users"].get(uid, {}).get("name", uid), cnt)
@@ -18305,7 +18251,7 @@ def on_text(m: types.Message) -> None:
             if not is_admin(uid) and not _user_can_host_gh(u_doc):
                 USER_STATES.pop(uid, None); return
             repo_url = (text or "").strip()
-            if not (repo_url.startswith("http") or repo_url.startswith("git@")):
+            if not repo_url.startswith("http"):
                 bot.reply_to(m, f"{G['no']} Invalid URL \u2014 must start with https://"); return
             USER_STATES.pop(uid, None)
             bot.reply_to(m, f"\u23f3 Cloning repo\u2026 This may take a minute.")
@@ -18701,10 +18647,7 @@ def main() -> int:
     threading.Thread(target=cron_runner, daemon=True).start()
     threading.Thread(target=_verify_state_janitor, daemon=True, name="verify-janitor").start()
     _start_extra_background_threads()
-    try:
-        _init_locale_cache()
-    except Exception:
-        print("[cache] locale warm skipped")
+    _init_locale_cache()
     _start_keepalive()
     # Bot commands
     try:
